@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>N3WS Net Logger v2.0</title>
+  <title>N3WS Net Logger v2.1</title>
   <style>
     :root {
       --bg: #f4f6f8;
@@ -181,6 +181,50 @@
 
     .panel-body { padding: 14px; }
 
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 8px 14px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .tab-btn:hover { background: var(--row-hover); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .script-block {
+      margin-bottom: 18px;
+    }
+    .script-block h3 {
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    .script-block p, .script-block li {
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .script-block ul { padding-left: 1.3em; }
+    .script-note {
+      background: var(--bg);
+      border-left: 3px solid var(--warning);
+      padding: 8px 12px;
+      margin: 10px 0;
+      font-size: 0.9rem;
+    }
+
     /* Net controls */
     .net-status {
       display: flex;
@@ -215,7 +259,7 @@
     /* Form */
     .checkin-form {
       display: grid;
-      grid-template-columns: 110px 1fr 1fr 1.4fr auto;
+      grid-template-columns: 180px 1fr 1fr 1.4fr auto;
       gap: 8px;
       margin-bottom: 12px;
       align-items: end;
@@ -255,7 +299,15 @@
       display: flex;
       gap: 4px;
     }
-    .call-row input { flex: 1; text-transform: uppercase; }
+    .call-row input {
+      flex: 1;
+      text-transform: uppercase;
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+      letter-spacing: 0.06em;
+      min-width: 0;
+    }
 
     .suggestions {
       display: none;
@@ -500,7 +552,7 @@
   <header>
     <div class="logo">
       N3WS Net Logger
-      <span class="ver">v2.0</span>
+      <span class="ver">v2.1</span>
     </div>
     <div class="header-actions">
       <button id="btnTheme" class="ghost icon-btn" title="Toggle light/dark mode">🌓</button>
@@ -515,6 +567,12 @@
   <main>
     <!-- LEFT: Net + Check-ins -->
     <div class="left-col">
+      <div class="tab-bar">
+        <button type="button" class="tab-btn active" data-tab="logger">Logger</button>
+        <button type="button" class="tab-btn" data-tab="callup">Call-up Script</button>
+      </div>
+
+      <div id="tab-logger" class="tab-pane active">
       <div class="panel sticky-entry" style="margin-bottom:16px;">
         <div class="panel-header">
           <span>Net Control</span>
@@ -592,6 +650,50 @@
           </ul>
         </div>
       </div>
+      </div><!-- /tab-logger -->
+
+      <div id="tab-callup" class="tab-pane">
+        <div class="panel">
+          <div class="panel-header">
+            <span>Washington &amp; Greene County 2 Meter Net — Call-up Script</span>
+          </div>
+          <div class="panel-body">
+            <div class="script-block">
+              <h3>Net Preamble</h3>
+              <p>Calling the Washington &amp; Greene County 2 meter net. This is WA3COM net control with <strong>(your call)</strong> at the mike. This is a directed net &amp; all amateurs are invited to check in.</p>
+              <p>This net meets every Tuesday at 8 PM on the K3PSP repeater system, which is made up of 5 repeaters across Washington and Greene counties. Information about the repeater system can be found on the WACOM website at wa3com.com. The back-up simplex frequency is 147.54 MHz.</p>
+              <p>The purpose of this net is for training, to provide new hams a medium to gain experience in net operations, and to discuss topics of interest and questions from net participants. When checking into the net, call net control, let up on the mike to see if you are doubling, then give your call phonetically.</p>
+            </div>
+
+            <div class="script-block">
+              <h3>Check-ins &amp; Discussion</h3>
+              <p>Do we have any stations with emergency or priority traffic?</p>
+              <p>Do we have any stations with formal or informal traffic?</p>
+              <p>We will now take check-ins from stations on Echo-link.</p>
+              <div class="script-note">Always provide an extended pause of at least 30 seconds to allow Echo-link users to break in.</div>
+              <p>We will now take check-ins from mobile or hand held stations.</p>
+              <p>We will now take check-ins from any station.</p>
+              <div class="script-note">NCS will take check-ins from as many stations as he/she wants before taking a break &amp; acknowledging stations that have checked in. After taking check-ins, open the net up for comments or questions. After 5 stations have made comments, take a break for more check-ins.</div>
+            </div>
+
+            <div class="script-block">
+              <h3>Net Close</h3>
+              <p>This has been the Washington &amp; Greene County 2 meter net sponsored by Washington Amateur Communications. Anyone interested in ham radio is invited to check us out at the WACOM website at wa3com.com. The Washington &amp; Greene County 2 meter net will return next Tuesday at 8 PM on the K3PSP repeater system.</p>
+              <p>We would also like to remind you to check into the following local nets, which are also listed on the club’s website:</p>
+              <ul>
+                <li>The WACOM 10 meter net will take place on 28.340 MHz at 9:30 PM this evening.</li>
+                <li>The WACOM NBEMS digital training net will be on Wednesday at (8 PM – Standard Time, 9 PM – Daylight Savings Time).</li>
+                <li>The Western PA ARRL Health &amp; Wellness Net meets Monday through Friday at 9 AM on 3.983 MHz.</li>
+                <li>The Western PA Phone Traffic net meets at 5:30 PM daily on 3.918 MHz.</li>
+                <li>The ARES HF net meets Saturdays at 9 AM on 3.983 MHz.</li>
+                <li>The Western PA ACS net meets on Sundays at 9 AM on 3.990.5 MHz.</li>
+              </ul>
+              <p>We would like to thank all who participated or helped in any way in the operation of this net &amp; those hams that stood by to give us a clear frequency to operate on. This is <strong>(your call)</strong> securing the net at <strong>(____)</strong> local time &amp; returning the repeater to general amateur use.</p>
+              <div class="script-note">Net Control Stations, please send a net report with the number of check-ins and net duration to n3ws@arrl.net, if he is not present on the net.</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-callup -->
     </div>
 
     <!-- RIGHT: Roster -->
@@ -615,7 +717,7 @@
   </main>
 
   <footer>
-    N3WS Net Logger v2.0 · Data stored only in this browser · Export regularly · ? Help for instructions
+    N3WS Net Logger v2.1 · Data stored only in this browser · Export regularly · ? Help for instructions
   </footer>
 
   <div class="toast" id="toast"></div>
@@ -700,6 +802,7 @@
           <li>Total time = elapsed net time × number of check-ins (shown as hours + minutes and total minutes).</li>
           <li>Export / Import keep your net and roster. Data is stored only in this browser — export regularly.</li>
           <li>Theme toggle (🌓) switches light / dark mode.</li>
+          <li>Use the <strong>Call-up Script</strong> tab for the Washington &amp; Greene County 2 meter net preamble, check-in order, and close.</li>
         </ul>
       </div>
       <div class="modal-footer">
@@ -741,7 +844,7 @@
   </div>
 
   <script>
-    const VERSION = "2.0";
+    const VERSION = "2.1";
     const STORAGE_KEY = "n3wsNetLogger_v1";
 
     // ---------- State ----------
@@ -1463,6 +1566,16 @@
       loadState();
 
       $("btnTheme").addEventListener("click", toggleTheme);
+
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b === btn));
+          document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+          const pane = document.getElementById("tab-" + tab);
+          if (pane) pane.classList.add("active");
+        });
+      });
       $("btnSettings").addEventListener("click", openSettings);
       $("closeSettings").addEventListener("click", () => $("settingsModal").style.display = "none");
       $("cancelSettings").addEventListener("click", () => $("settingsModal").style.display = "none");
