@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event NCS Activity Log</title>
+<style>
+:root {
+  --bg: #0f1419;
+  --surface: #1a2332;
+  --surface2: #243044;
+  --border: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --injury: #f97316;
+  --dropout: #8b5cf6;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+.container { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
+header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+h1 { margin: 0 0 8px; font-size: 1.5rem; }
+.race-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.95rem;
+}
+.race-meta input, .race-meta select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+h2 { margin: 0 0 12px; font-size: 1.2rem; }
+form { display: flex; flex-direction: column; gap: 10px; }
+label { font-size: 0.85rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+input, select, textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+textarea { min-height: 70px; resize: vertical; }
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+button:hover { background: var(--accent-hover); }
+button.secondary { background: var(--surface2); border: 1px solid var(--border); }
+button.secondary:hover { background: #2d3b52; }
+button.danger { background: var(--danger); }
+button.small { padding: 4px 10px; font-size: 0.85rem; }
+.list { display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow-y: auto; }
+.item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+.item header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-injury { background: #7c2d12; color: #fdba74; }
+.badge-dropout { background: #4c1d95; color: #c4b5fd; }
+.badge-medical { background: #78350f; color: #fcd34d; }
+.badge-volunteer { background: #14532d; color: #86efac; }
+.badge-general { background: #1e3a8a; color: #93c5fd; }
+.badge-radio { background: #4c1d95; color: #ddd6fe; }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.empty { color: var(--muted); font-style: italic; padding: 12px; text-align: center; }
+.stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+.stat { background: var(--surface2); padding: 8px 12px; border-radius: 8px; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.filter-bar button.active { background: var(--accent); }
+.quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.quick-actions button { padding: 6px 12px; font-size: 0.9rem; }
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--success);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.edit-mode { outline: 2px solid var(--warning); }
+#logSubmitBtn.update { background: var(--warning); color: #111; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Event — Net Control Activity Log</h1>
+    <div class="race-meta">
+      <label>Event Name <input id="eventName" type="text" placeholder="e.g. 5K for Hunger"></label>
+      <label>Date <input id="eventDate" type="date"></label>
+      <label>Primary NCS / Prepared By <input id="ncsName" type="text" placeholder="Name / callsign (for ICS-214)"></label>
+      <label>ICS Position <input id="icsPosition" type="text" placeholder="Net Control Station"></label>
+      <label>Home Agency <input id="homeAgency" type="text" placeholder="e.g. ARES / Club / Agency"></label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- Volunteers -->
+    <div class="card">
+      <h2>Volunteers <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(add all NCS operators here too)</span></h2>
+      <form id="volForm">
+        <label>Name / Callsign
+          <input id="volName" type="text" required placeholder="Name or callsign">
+        </label>
+        <label>Role
+          <input id="volRole" type="text" placeholder="e.g. NCS, Aid Station 2, Sweep, Medical">
+        </label>
+        <label>Contact
+          <input id="volContact" type="text" placeholder="Phone or radio channel">
+        </label>
+        <button type="submit">Add Volunteer</button>
+      </form>
+      <div class="stats" id="volStats"></div>
+      <div class="list" id="volList"></div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="card">
+      <h2>Activity Log</h2>
+      <div class="quick-actions">
+        <button type="button" data-type="injury">+ Injury</button>
+        <button type="button" data-type="dropout">+ Dropout</button>
+        <button type="button" data-type="medical">+ Medical</button>
+        <button type="button" data-type="general">+ Note</button>
+        <button type="button" data-type="radio">+ Radio Issue</button>
+      </div>
+      <form id="logForm">
+        <label>Type
+          <select id="logType">
+            <option value="general">General Note</option>
+            <option value="injury">Injury</option>
+            <option value="dropout">Runner Dropout</option>
+            <option value="medical">Medical Event</option>
+            <option value="volunteer">Volunteer Action</option>
+            <option value="radio">Radio / Comms</option>
+          </select>
+        </label>
+        <label>Description
+          <textarea id="logDesc" required placeholder="Details (bib number, location, action taken…)"></textarea>
+        </label>
+        <label>Related Volunteer
+          <select id="logVol"><option value="">— none —</option></select>
+        </label>
+        <label>Bib / Runner ID
+          <input id="logBib" type="text" placeholder="optional">
+        </label>
+        <div style="display:flex; gap:8px;">
+          <button type="submit" id="logSubmitBtn">Add Log Entry</button>
+          <button type="button" id="cancelEditBtn" class="secondary" style="display:none;">Cancel Edit</button>
+        </div>
+      </form>
+      <div class="stats" id="logStats"></div>
+      <div class="filter-bar">
+        <button type="button" class="secondary active" data-filter="all">All</button>
+        <button type="button" class="secondary" data-filter="injury">Injuries</button>
+        <button type="button" class="secondary" data-filter="dropout">Dropouts</button>
+        <button type="button" class="secondary" data-filter="medical">Medical</button>
+        <button type="button" class="secondary" data-filter="volunteer">Volunteers</button>
+      </div>
+      <div class="list" id="logList"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Import / Export / Backup</h2>
+    <p style="margin:0 0 12px; color:var(--muted); font-size:0.9rem;">
+      Data is automatically saved in this browser’s local storage. Use Export regularly as a backup.
+    </p>
+    <div class="controls">
+      <button id="exportBtn">Export JSON</button>
+      <label style="margin:0;">
+        Import JSON
+        <input id="importFile" type="file" accept=".json" style="margin-top:4px;">
+      </label>
+      <button id="exportCsvBtn" class="secondary">Export Log as CSV</button>
+      <button id="exportIcs214Btn" class="secondary">Export ICS-214 (Printable)</button>
+      <button id="clearBtn" class="danger">Clear All Data</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Saved</div>
+
+<script>
+const STORAGE_KEY = 'charityRunNCSLog_v1';
+
+let state = {
+  eventName: '',
+  eventDate: new Date().toISOString().slice(0, 10),
+  ncsName: '',
+  icsPosition: 'Net Control Station',
+  homeAgency: '',
+  volunteers: [],
+  logs: []
+};
+
+let editingLogId = null;
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function nowISO() {
+  return new Date().toISOString();
+}
+
+function formatTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString();
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString();
+}
+
+function formatTime24(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    showToast('Saved');
+  } catch (e) {
+    console.error(e);
+    alert('Could not save to local storage. Storage may be full or blocked.');
+  }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state = { ...state, ...parsed };
+    }
+  } catch (e) {
+    console.error('Load failed', e);
+  }
+  if (!Array.isArray(state.volunteers)) state.volunteers = [];
+  if (!Array.isArray(state.logs)) state.logs = [];
+  if (!state.icsPosition) state.icsPosition = 'Net Control Station';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+function renderVolunteers() {
+  const list = document.getElementById('volList');
+  const sel = document.getElementById('logVol');
+  const stats = document.getElementById('volStats');
+
+  const active = state.volunteers.filter(v => !v.checkOut).length;
+  stats.innerHTML = `<div class="stat">Total: ${state.volunteers.length}</div><div class="stat">On duty: ${active}</div>`;
+
+  sel.innerHTML = '<option value="">— none —</option>';
+  state.volunteers.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.id;
+    opt.textContent = v.name + (v.role ? ` (${v.role})` : '');
+    sel.appendChild(opt);
+  });
+
+  if (state.volunteers.length === 0) {
+    list.innerHTML = '<div class="empty">No volunteers yet</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  [...state.volunteers].reverse().forEach(v => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    const status = v.checkOut ? 'Out' : 'On duty';
+    div.innerHTML = `
+      <header>
+        <strong>${escapeHtml(v.name)}</strong>
+        <span class="time">${status}</span>
+      </header>
+      <div>${escapeHtml(v.role || '—')} ${v.contact ? '· ' + escapeHtml(v.contact) : ''}</div>
+      <div class="time">In: ${formatTime(v.checkIn)}${v.checkOut ? ' · Out: ' + formatTime(v.checkOut) : ''}</div>
+      <div style="margin-top:6px;">
+        ${!v.checkOut ? `<button class="small secondary" data-action="checkout" data-id="${v.id}">Check Out</button>` : ''}
+        <button class="small danger" data-action="delvol" data-id="${v.id}">Remove</button>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function renderLogs(filter = 'all') {
+  updateDuration();
+  const list = document.getElementById('logList');
+  let logs = [...state.logs].reverse();
+
+  if (filter !== 'all') {
+    logs = logs.filter(l => l.type === filter);
+  }
+
+  if (logs.length === 0) {
+    list.innerHTML = '<div class="empty">No log entries yet</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  logs.forEach(l => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    const vol = state.volunteers.find(v => v.id === l.volunteerId);
+    const volName = vol ? vol.name : '';
+    div.innerHTML = `
+      <header>
+        <span class="badge badge-${l.type}">${l.type}</span>
+        <span class="time">${formatTime(l.timestamp)}</span>
+      </header>
+      <div>${escapeHtml(l.description)}</div>
+      ${l.bib ? `<div class="time">Bib: ${escapeHtml(l.bib)}</div>` : ''}
+      ${volName ? `<div class="time">Volunteer: ${escapeHtml(volName)}</div>` : ''}
+      <div style="margin-top:6px;">
+        <button class="small secondary" data-action="editlog" data-id="${l.id}">Edit</button>
+        <button class="small danger" data-action="dellog" data-id="${l.id}">Delete</button>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function updateDuration() {
+  const el = document.getElementById('logStats');
+  if (!el) return;
+  if (state.logs.length === 0) {
+    el.innerHTML = '<div class="stat">Total time: —</div>';
+    return;
+  }
+  const times = state.logs.map(l => new Date(l.timestamp).getTime());
+  const first = Math.min(...times);
+  const last = Math.max(...times);
+  const ms = last - first;
+  const totalMin = Math.round(ms / 60000);
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  const dur = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  el.innerHTML = `<div class="stat">Entries: ${state.logs.length}</div><div class="stat">Total time (first→last): ${dur}</div>`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"');
+}
+
+function addVolunteer(name, role, contact) {
+  const v = {
+    id: uid(),
+    name: name.trim(),
+    role: (role || '').trim(),
+    contact: (contact || '').trim(),
+    checkIn: nowISO(),
+    checkOut: null
+  };
+  state.volunteers.push(v);
+  state.logs.push({
+    id: uid(),
+    timestamp: v.checkIn,
+    type: 'volunteer',
+    description: `Volunteer checked in: ${v.name}${v.role ? ' (' + v.role + ')' : ''}`,
+    volunteerId: v.id,
+    bib: ''
+  });
+  save();
+  renderVolunteers();
+  renderLogs(currentFilter);
+}
+
+function checkOutVolunteer(id) {
+  const v = state.volunteers.find(x => x.id === id);
+  if (!v || v.checkOut) return;
+  v.checkOut = nowISO();
+  state.logs.push({
+    id: uid(),
+    timestamp: v.checkOut,
+    type: 'volunteer',
+    description: `Volunteer checked out: ${v.name}`,
+    volunteerId: v.id,
+    bib: ''
+  });
+  save();
+  renderVolunteers();
+  renderLogs(currentFilter);
+}
+
+function addLog(type, description, volunteerId, bib) {
+  const entry = {
+    id: uid(),
+    timestamp: nowISO(),
+    type,
+    description: description.trim(),
+    volunteerId: volunteerId || null,
+    bib: (bib || '').trim()
+  };
+  state.logs.push(entry);
+  save();
+  renderLogs(currentFilter);
+}
+
+function updateLog(id, type, description, volunteerId, bib) {
+  const entry = state.logs.find(l => l.id === id);
+  if (!entry) return;
+  entry.type = type;
+  entry.description = description.trim();
+  entry.volunteerId = volunteerId || null;
+  entry.bib = (bib || '').trim();
+  // Keep original timestamp
+  save();
+  renderLogs(currentFilter);
+}
+
+function startEdit(id) {
+  const entry = state.logs.find(l => l.id === id);
+  if (!entry) return;
+  editingLogId = id;
+  document.getElementById('logType').value = entry.type;
+  document.getElementById('logDesc').value = entry.description;
+  document.getElementById('logVol').value = entry.volunteerId || '';
+  document.getElementById('logBib').value = entry.bib || '';
+  const btn = document.getElementById('logSubmitBtn');
+  btn.textContent = 'Update Entry';
+  btn.classList.add('update');
+  document.getElementById('cancelEditBtn').style.display = 'inline-block';
+  document.getElementById('logDesc').focus();
+  document.getElementById('logForm').classList.add('edit-mode');
+}
+
+function cancelEdit() {
+  editingLogId = null;
+  document.getElementById('logForm').reset();
+  const btn = document.getElementById('logSubmitBtn');
+  btn.textContent = 'Add Log Entry';
+  btn.classList.remove('update');
+  document.getElementById('cancelEditBtn').style.display = 'none';
+  document.getElementById('logForm').classList.remove('edit-mode');
+}
+
+let currentFilter = 'all';
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-bar button').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === f);
+  });
+  renderLogs(f);
+}
+
+function exportJSON() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = (state.eventName || 'charity-run').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  a.download = `${name}-ncs-log-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Exported');
+}
+
+function exportCSV() {
+  const headers = ['Timestamp','Type','Description','Bib','Volunteer'];
+  const rows = state.logs.map(l => {
+    const vol = state.volunteers.find(v => v.id === l.volunteerId);
+    return [
+      formatDateTime(l.timestamp),
+      l.type,
+      `"${(l.description || '').replace(/"/g, '""')}"`,
+      l.bib || '',
+      vol ? vol.name : ''
+    ].join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ncs-activity-log-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('CSV exported');
+}
+
+function exportICS214() {
+  const sortedLogs = [...state.logs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const first = sortedLogs[0];
+  const last = sortedLogs[sortedLogs.length - 1];
+  const opFromDate = first ? formatDate(first.timestamp) : (state.eventDate || '');
+  const opFromTime = first ? formatTime24(first.timestamp) : '';
+  const opToDate = last ? formatDate(last.timestamp) : '';
+  const opToTime = last ? formatTime24(last.timestamp) : '';
+
+  const resourcesHtml = state.volunteers.map(v => `
+    <tr>
+      <td>${escapeHtml(v.name)}</td>
+      <td>${escapeHtml(v.role || '')}</td>
+      <td>${escapeHtml(v.contact || state.homeAgency || '')}</td>
+    </tr>
+  `).join('');
+
+  const activitiesHtml = sortedLogs.map(l => {
+    const vol = state.volunteers.find(v => v.id === l.volunteerId);
+    let desc = l.description;
+    if (l.type !== 'general') desc = `[${l.type.toUpperCase()}] ${desc}`;
+    if (l.bib) desc += ` (Bib: ${l.bib})`;
+    if (vol) desc += ` [Vol: ${vol.name}]`;
+    return `
+      <tr>
+        <td style="white-space:nowrap;">${formatDate(l.timestamp)} ${formatTime24(l.timestamp)}</td>
+        <td>${escapeHtml(desc)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ICS 214 - ${escapeHtml(state.eventName || 'Activity Log')}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 0.5in; }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  .header-table td { border: 1px solid #000; }
+  .no-border { border: none !important; }
+  .label { font-weight: bold; font-size: 9pt; }
+  .sig { margin-top: 24px; }
+  @media print {
+    body { margin: 0.4in; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="no-print" style="text-align:right; margin-bottom:12px;">
+  <button onclick="window.print()">Print / Save as PDF</button>
+</div>
+<h1>ACTIVITY LOG (ICS 214)</h1>
+
+<table class="header-table">
+  <tr>
+    <td style="width:40%;"><span class="label">1. Incident Name:</span><br>${escapeHtml(state.eventName || '')}</td>
+    <td>
+      <span class="label">2. Operational Period:</span><br>
+      Date From: ${opFromDate} &nbsp;&nbsp; Date To: ${opToDate}<br>
+      Time From: ${opFromTime} &nbsp;&nbsp; Time To: ${opToTime}
+    </td>
+  </tr>
+  <tr>
+    <td><span class="label">3. Name:</span><br>${escapeHtml(state.ncsName || 'Net Control Station')}</td>
+    <td><span class="label">4. ICS Position:</span><br>${escapeHtml(state.icsPosition || 'Net Control Station')}</td>
+    <td><span class="label">5. Home Agency (and Unit):</span><br>${escapeHtml(state.homeAgency || '')}</td>
+  </tr>
+</table>
+
+<div class="label">6. Resources Assigned:</div>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>ICS Position</th>
+      <th>Home Agency (and Unit)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${resourcesHtml || '<tr><td colspan="3">—</td></tr>'}
+  </tbody>
+</table>
+
+<div class="label">7. Activity Log:</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:140px;">Date/Time</th>
+      <th>Notable Activities</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${activitiesHtml || '<tr><td colspan="2">No entries</td></tr>'}
+  </tbody>
+</table>
+
+<div class="sig">
+  <strong>8. Prepared by:</strong><br>
+  Name: ${escapeHtml(state.ncsName || '')}<br>
+  Position/Title: ${escapeHtml(state.icsPosition || 'Net Control Station')}<br>
+  Date/Time: ${formatDateTime(new Date().toISOString())}<br>
+  Signature: _______________________________
+</div>
+
+<p style="font-size:9pt; color:#555; margin-top:20px;">
+  Generated from Charity Run NCS Activity Log. Print or use browser “Save as PDF” for official records.
+</p>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if (!w) {
+    alert('Popup blocked. Please allow popups and try again, or use the download method.');
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast('ICS-214 opened');
+}
+
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (!parsed || typeof parsed !== 'object') throw new Error('Invalid');
+      state = {
+        eventName: parsed.eventName || '',
+        eventDate: parsed.eventDate || state.eventDate,
+        ncsName: parsed.ncsName || '',
+        icsPosition: parsed.icsPosition || 'Net Control Station',
+        homeAgency: parsed.homeAgency || '',
+        volunteers: Array.isArray(parsed.volunteers) ? parsed.volunteers : [],
+        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+      };
+      save();
+      applyMetaToForm();
+      renderVolunteers();
+      renderLogs(currentFilter);
+      showToast('Imported successfully');
+    } catch (err) {
+      alert('Import failed: invalid JSON file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function clearAll() {
+  if (!confirm('Delete ALL volunteers and log entries? This cannot be undone (unless you have an export).')) return;
+  state.volunteers = [];
+  state.logs = [];
+  save();
+  renderVolunteers();
+  renderLogs(currentFilter);
+  cancelEdit();
+  showToast('Cleared');
+}
+
+function applyMetaToForm() {
+  document.getElementById('eventName').value = state.eventName || '';
+  document.getElementById('eventDate').value = state.eventDate || '';
+  document.getElementById('ncsName').value = state.ncsName || '';
+  document.getElementById('icsPosition').value = state.icsPosition || 'Net Control Station';
+  document.getElementById('homeAgency').value = state.homeAgency || '';
+}
+
+function bindMeta() {
+  ['eventName','eventDate','ncsName','icsPosition','homeAgency'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      state[id] = el.value;
+      save();
+    });
+  });
+}
+
+// Event listeners
+document.getElementById('volForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = document.getElementById('volName').value;
+  if (!name.trim()) return;
+  addVolunteer(
+    name,
+    document.getElementById('volRole').value,
+    document.getElementById('volContact').value
+  );
+  e.target.reset();
+});
+
+document.getElementById('logForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const desc = document.getElementById('logDesc').value;
+  if (!desc.trim()) return;
+  const type = document.getElementById('logType').value;
+  const volId = document.getElementById('logVol').value;
+  const bib = document.getElementById('logBib').value;
+
+  if (editingLogId) {
+    updateLog(editingLogId, type, desc, volId, bib);
+    cancelEdit();
+    showToast('Entry updated');
+  } else {
+    addLog(type, desc, volId, bib);
+    document.getElementById('logDesc').value = '';
+    document.getElementById('logBib').value = '';
+    document.getElementById('logVol').value = '';  // reset volunteer to none
+  }
+});
+
+document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
+
+// Quick buttons
+document.querySelectorAll('.quick-actions button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (editingLogId) cancelEdit();
+    const type = btn.dataset.type;
+    document.getElementById('logType').value = type;
+    document.getElementById('logDesc').focus();
+  });
+});
+
+// Filter
+document.querySelectorAll('.filter-bar button').forEach(btn => {
+  btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+});
+
+// Delegated actions
+document.body.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  if (action === 'checkout') checkOutVolunteer(id);
+  if (action === 'delvol') {
+    if (confirm('Remove this volunteer?')) {
+      state.volunteers = state.volunteers.filter(v => v.id !== id);
+      save();
+      renderVolunteers();
+    }
+  }
+  if (action === 'dellog') {
+    if (confirm('Delete this log entry?')) {
+      state.logs = state.logs.filter(l => l.id !== id);
+      save();
+      renderLogs(currentFilter);
+      if (editingLogId === id) cancelEdit();
+    }
+  }
+  if (action === 'editlog') {
+    startEdit(id);
+  }
+});
+
+document.getElementById('exportBtn').addEventListener('click', exportJSON);
+document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
+document.getElementById('exportIcs214Btn').addEventListener('click', exportICS214);
+document.getElementById('importFile').addEventListener('change', e => {
+  if (e.target.files[0]) importJSON(e.target.files[0]);
+  e.target.value = '';
+});
+document.getElementById('clearBtn').addEventListener('click', clearAll);
+
+// Init
+load();
+applyMetaToForm();
+bindMeta();
+renderVolunteers();
+renderLogs();
+
+window.addEventListener('beforeunload', e => {
+  if (state.logs.length > 0 || state.volunteers.length > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+</script>
+</body>
+</html>

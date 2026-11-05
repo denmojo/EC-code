@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skywarn NCS Log</title>
+<style>
+:root {
+  --bg: #0f1419;
+  --fg: #e6edf3;
+  --accent: #58a6ff;
+  --card: #161b22;
+  --border: #30363d;
+  --success: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.4;
+}
+header {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+label { display: block; font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.2rem; }
+input, select, textarea {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+textarea { min-height: 60px; resize: vertical; }
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-right: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+button.secondary { background: #21262d; border: 1px solid var(--border); }
+button.danger { background: var(--danger); }
+button.success { background: var(--success); }
+button:hover { opacity: 0.9; }
+.form-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+th, td {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th { background: #21262d; font-weight: 600; position: sticky; top: 0; }
+tr:hover td { background: #1c2128; }
+.priority-Emergency { color: var(--danger); font-weight: bold; }
+.priority-Priority { color: var(--warn); }
+.actions { white-space: nowrap; }
+.actions button { padding: 0.2rem 0.5rem; font-size: 0.8rem; margin: 0 0.2rem; }
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+.operators {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.op-in { color: var(--success); }
+.op-out { opacity: 0.6; }
+@media print {
+  body { background: #fff; color: #000; }
+  header, .form-section, button, .actions, .operators { display: none !important; }
+  table { font-size: 11pt; }
+  th { background: #eee !important; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ Skywarn Activation NCS Log</h1>
+  <div class="grid">
+    <div>
+      <label>Date</label>
+      <input type="date" id="netDate">
+    </div>
+    <div>
+      <label>Net Start</label>
+      <input type="time" id="netStart" step="1">
+      <button type="button" class="secondary" style="margin-top:0.25rem; font-size:0.8rem; padding:0.25rem 0.5rem;" onclick="stampStart()">Stamp Now</button>
+    </div>
+    <div>
+      <label>Net Stop</label>
+      <input type="time" id="netStop" step="1">
+      <button type="button" class="secondary" style="margin-top:0.25rem; font-size:0.8rem; padding:0.25rem 0.5rem;" onclick="stampStop()">Stamp Now</button>
+    </div>
+    <div>
+      <label>Frequency</label>
+      <input type="text" id="frequency" placeholder="e.g. 146.52 or repeater">
+    </div>
+    <div>
+      <label>NCS Callsign</label>
+      <input type="text" id="ncsCall" placeholder="N3WS" value="N3WS">
+    </div>
+    <div>
+      <label>Mode</label>
+      <select id="mode">
+        <option>Watch</option>
+        <option>Warning</option>
+        <option>Standby</option>
+        <option>Closed</option>
+      </select>
+    </div>
+    <div>
+      <label>Backup NCS</label>
+      <input type="text" id="backupNcs" placeholder="Callsign">
+    </div>
+  </div>
+  <div style="margin-top:0.75rem;">
+    <label>Net Notes / Activation Info</label>
+    <textarea id="netNotes" placeholder="County, NWS office, special instructions..."></textarea>
+  </div>
+  <div style="margin-top:0.75rem;">
+    <button onclick="saveHeader()">Save Header</button>
+    <button class="secondary" onclick="exportCSV()">Export CSV</button>
+    <button class="secondary" onclick="exportJSON()">Export JSON</button>
+    <button class="secondary" onclick="document.getElementById('importFile').click()">Import JSON</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+    <button class="secondary" onclick="exportICS214()">Export ICS-214</button>
+    <button class="secondary" onclick="window.print()">Print Log</button>
+    <button class="danger" onclick="clearLog()">Clear All</button>
+  </div>
+</header>
+
+<div class="stats" id="stats">Entries: 0 | Check-ins: 0 | Reports: 0 | Net Time: — | Operator Time: —</div>
+
+<div class="operators" id="operatorsBox">
+  <strong>Operators currently checked in:</strong> <span id="currentOps">none</span>
+</div>
+
+<div class="form-section">
+  <h2 style="margin:0 0 0.75rem; font-size:1.1rem;">Add Entry</h2>
+  <div class="grid">
+    <div>
+      <label>Time (auto if blank)</label>
+      <input type="time" id="entryTime" step="1">
+    </div>
+    <div>
+      <label>Callsign</label>
+      <input type="text" id="callsign" placeholder="W1ABC" required>
+    </div>
+    <div>
+      <label>Name</label>
+      <input type="text" id="name" placeholder="First name">
+    </div>
+    <div>
+      <label>Location</label>
+      <input type="text" id="location" placeholder="City / County">
+    </div>
+    <div>
+      <label>Type</label>
+      <select id="type">
+        <option>Check-in</option>
+        <option>Hail</option>
+        <option>Wind</option>
+        <option>Rain / Flooding</option>
+        <option>Tornado / Funnel</option>
+        <option>Damage</option>
+        <option>Lightning</option>
+        <option>Other WX</option>
+        <option>Traffic / Message</option>
+        <option>Check-out</option>
+      </select>
+    </div>
+    <div>
+      <label>Priority</label>
+      <select id="priority">
+        <option>Normal</option>
+        <option>Priority</option>
+        <option>Emergency</option>
+      </select>
+    </div>
+  </div>
+  <div style="margin-top:0.75rem;">
+    <label>Details / Report</label>
+    <textarea id="details" placeholder="What was observed, size, duration, movement, etc."></textarea>
+  </div>
+  <button onclick="addEntry()" style="margin-top:0.75rem;">Add to Log</button>
+</div>
+
+<div style="overflow-x:auto;">
+<table id="logTable">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Callsign</th>
+      <th>Name</th>
+      <th>Location</th>
+      <th>Type</th>
+      <th>Priority</th>
+      <th>Details</th>
+      <th class="actions">Actions</th>
+    </tr>
+  </thead>
+  <tbody id="logBody"></tbody>
+</table>
+</div>
+
+<script>
+const STORAGE_KEY = 'skywarnNcsLog_v2';
+
+let log = [];
+let header = {};
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      log = data.log || [];
+      header = data.header || {};
+      applyHeader();
+    }
+  } catch(e) {}
+  render();
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ log, header }));
+}
+
+function applyHeader() {
+  document.getElementById('netDate').value = header.date || new Date().toISOString().slice(0,10);
+  document.getElementById('netStart').value = header.start || '';
+  document.getElementById('netStop').value = header.stop || '';
+  document.getElementById('frequency').value = header.frequency || '';
+  document.getElementById('ncsCall').value = header.ncsCall || 'N3WS';
+  document.getElementById('mode').value = header.mode || 'Watch';
+  document.getElementById('backupNcs').value = header.backup || '';
+  document.getElementById('netNotes').value = header.notes || '';
+}
+
+function saveHeader() {
+  header = {
+    date: document.getElementById('netDate').value,
+    start: document.getElementById('netStart').value,
+    stop: document.getElementById('netStop').value,
+    frequency: document.getElementById('frequency').value,
+    ncsCall: document.getElementById('ncsCall').value.toUpperCase(),
+    mode: document.getElementById('mode').value,
+    backup: document.getElementById('backupNcs').value.toUpperCase(),
+    notes: document.getElementById('netNotes').value
+  };
+  save();
+  alert('Header saved');
+  render();
+}
+
+function stampStart() {
+  const now = new Date().toTimeString().slice(0,8);
+  document.getElementById('netStart').value = now;
+  saveHeader();
+
+  // Auto-add NCS as a Check-in
+  const ncs = (document.getElementById('ncsCall').value || '').trim().toUpperCase();
+  if (ncs) {
+    const already = log.some(e => e.callsign === ncs && e.type === 'Check-in' && e.time === now);
+    if (!already) {
+      log.unshift({
+        id: Date.now(),
+        time: now,
+        callsign: ncs,
+        name: '',
+        location: '',
+        type: 'Check-in',
+        priority: 'Normal',
+        details: 'Net Control – net opened'
+      });
+      save();
+      render();
+    }
+  }
+}
+
+function stampStop() {
+  document.getElementById('netStop').value = new Date().toTimeString().slice(0,8);
+  saveHeader();
+}
+
+function addEntry() {
+  const call = document.getElementById('callsign').value.trim().toUpperCase();
+  if (!call) return alert('Callsign required');
+  const time = document.getElementById('entryTime').value || new Date().toTimeString().slice(0,8);
+  const entry = {
+    id: Date.now(),
+    time,
+    callsign: call,
+    name: document.getElementById('name').value.trim(),
+    location: document.getElementById('location').value.trim(),
+    type: document.getElementById('type').value,
+    priority: document.getElementById('priority').value,
+    details: document.getElementById('details').value.trim()
+  };
+  log.unshift(entry);
+  save();
+  render();
+  document.getElementById('callsign').value = '';
+  document.getElementById('name').value = '';
+  document.getElementById('location').value = '';
+  document.getElementById('details').value = '';
+  document.getElementById('entryTime').value = '';
+  document.getElementById('callsign').focus();
+}
+
+function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  log = log.filter(e => e.id !== id);
+  save();
+  render();
+}
+
+function timeToMinutes(t) {
+  if (!t) return null;
+  const [h, m, s] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0) + (s || 0) / 60;
+}
+
+function formatDuration(mins) {
+  if (mins == null || isNaN(mins) || mins < 0) return '—';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function isCheckInType(type) {
+  // Any report or explicit check-in counts as checked in
+  return type !== 'Check-out';
+}
+
+function getOperatorStatus() {
+  // Process oldest to newest so last action wins
+  const status = {};
+  const sorted = [...log].reverse(); // oldest first
+  sorted.forEach(e => {
+    if (!status[e.callsign]) {
+      status[e.callsign] = { name: '', location: '', in: false, lastTime: null };
+    }
+    const st = status[e.callsign];
+    if (e.name) st.name = e.name;
+    if (e.location) st.location = e.location;
+    st.lastTime = e.time;
+
+    if (isCheckInType(e.type)) {
+      st.in = true;
+    } else if (e.type === 'Check-out') {
+      st.in = false;
+    }
+  });
+  return status;
+}
+
+function calcTimes() {
+  const startMin = timeToMinutes(header.start);
+  const stopMin = timeToMinutes(header.stop) ?? timeToMinutes(new Date().toTimeString().slice(0,8));
+  const netMins = (startMin != null && stopMin != null) ? Math.max(0, stopMin - startMin) : null;
+
+  const opStatus = getOperatorStatus();
+
+  // Pair tracking: any non-Check-out opens or continues a session; Check-out closes it
+  const pairs = {};
+  [...log].reverse().forEach(e => { // oldest first
+    if (isCheckInType(e.type)) {
+      if (!pairs[e.callsign] || pairs[e.callsign].outTime) {
+        // Start a new open session
+        pairs[e.callsign] = { inTime: e.time, outTime: null, name: e.name, location: e.location };
+      } else {
+        // Already open — just refresh name/location if provided
+        if (e.name) pairs[e.callsign].name = e.name;
+        if (e.location) pairs[e.callsign].location = e.location;
+      }
+    } else if (e.type === 'Check-out' && pairs[e.callsign] && !pairs[e.callsign].outTime) {
+      pairs[e.callsign].outTime = e.time;
+    }
+  });
+
+  totalOpMins = 0;
+  const durations = {};
+  // NCS
+  if (header.ncsCall && netMins != null) {
+    durations[header.ncsCall] = netMins;
+    totalOpMins += netMins;
+  }
+  Object.entries(pairs).forEach(([call, p]) => {
+    if (call === header.ncsCall) return;
+    const inM = timeToMinutes(p.inTime);
+    const outM = p.outTime ? timeToMinutes(p.outTime) : (stopMin ?? timeToMinutes(new Date().toTimeString().slice(0,8)));
+    if (inM != null && outM != null) {
+      const d = Math.max(0, outM - inM);
+      durations[call] = (durations[call] || 0) + d;
+      totalOpMins += d;
+    }
+  });
+
+  return { netMins, totalOpMins, durations, current: Object.entries(opStatus).filter(([,s]) => s.in).map(([c,s]) => c) };
+}
+
+function render() {
+  const tbody = document.getElementById('logBody');
+  tbody.innerHTML = '';
+  let checkins = 0, reports = 0;
+  log.forEach(e => {
+    if (e.type === 'Check-in') checkins++;
+    else if (!['Check-out','Traffic / Message'].includes(e.type)) reports++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${e.time}</td>
+      <td><strong>${e.callsign}</strong></td>
+      <td>${e.name || ''}</td>
+      <td>${e.location || ''}</td>
+      <td>${e.type}</td>
+      <td class="priority-${e.priority}">${e.priority}</td>
+      <td>${e.details || ''}</td>
+      <td class="actions"><button class="secondary" onclick="deleteEntry(${e.id})">Del</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const { netMins, totalOpMins, durations, current } = calcTimes();
+  document.getElementById('stats').textContent =
+    `Entries: ${log.length} | Check-ins: ${checkins} | WX Reports: ${reports} | Net Time: ${formatDuration(netMins)} | Total Operator Time: ${formatDuration(totalOpMins)}`;
+
+  document.getElementById('currentOps').innerHTML = current.length
+    ? current.map(c => `<span class="op-in">${c}</span>`).join(', ')
+    : 'none';
+}
+
+function exportCSV() {
+  const headers = ['Time','Callsign','Name','Location','Type','Priority','Details'];
+  const rows = log.map(e => [e.time, e.callsign, e.name, e.location, e.type, e.priority, e.details]);
+  const csv = [headers, ...rows].map(r => r.map(f => `"${(f||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  downloadBlob(csv, `Skywarn_NCS_Log_${header.date || 'unknown'}.csv`, 'text/csv');
+}
+
+function exportJSON() {
+  const data = { header, log, exported: new Date().toISOString() };
+  downloadBlob(JSON.stringify(data, null, 2), `Skywarn_NCS_Log_${header.date || 'unknown'}.json`, 'application/json');
+}
+
+function importJSON(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.log && Array.isArray(data.log)) {
+        log = data.log;
+        header = data.header || {};
+        applyHeader();
+        save();
+        render();
+        alert('Imported successfully');
+      } else alert('Invalid log file');
+    } catch(err) { alert('Import failed: ' + err.message); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+function exportICS214() {
+  const { netMins, totalOpMins, durations } = calcTimes();
+  const date = header.date || new Date().toISOString().slice(0,10);
+  const incident = `Skywarn Activation ${date}`;
+  const activities = [...log].reverse().map(e => 
+    `<tr><td>${e.time}</td><td>${e.callsign} ${e.name||''} – ${e.type}${e.priority!=='Normal'?' ['+e.priority+']':''}: ${e.details||''}</td></tr>`
+  ).join('');
+
+  const opRows = Object.entries(durations).map(([call, mins]) => 
+    `<tr><td>${call}</td><td>Spotter / NCS</td><td>${formatDuration(mins)}</td></tr>`
+  ).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ICS-214 ${incident}</title>
+<style>
+body{font-family:Arial,sans-serif;margin:1in;font-size:11pt}
+h1{text-align:center;margin:0}
+table{width:100%;border-collapse:collapse;margin:0.5em 0}
+th,td{border:1px solid #000;padding:4px 6px;vertical-align:top}
+th{background:#eee}
+.box{border:1px solid #000;padding:8px;margin:8px 0}
+@media print{body{margin:0.5in}}
+</style></head><body>
+<h1>ACTIVITY LOG (ICS 214)</h1>
+<div class="box"><strong>1. Incident Name:</strong> ${incident}</div>
+<div class="box"><strong>2. Operational Period:</strong><br>
+Date From: ${date} &nbsp;&nbsp; Date To: ${date}<br>
+Time From: ${header.start||'—'} &nbsp;&nbsp; Time To: ${header.stop||'—'}</div>
+<div class="box"><strong>3. Name:</strong> Skywarn Net Control<br>
+<strong>4. ICS Position:</strong> Net Control Station (${header.ncsCall||''})<br>
+<strong>5. Home Agency:</strong> Amateur Radio / Skywarn</div>
+<div class="box"><strong>6. Resources Assigned:</strong>
+<table><tr><th>Name / Call</th><th>ICS Position</th><th>Time on Net</th></tr>
+${opRows || '<tr><td colspan="3">None recorded</td></tr>'}
+</table>
+<p><em>Net operating time: ${formatDuration(netMins)} &nbsp;|&nbsp; Total operator time (incl. NCS): ${formatDuration(totalOpMins)}</em></p>
+</div>
+<div class="box"><strong>7. Activity Log:</strong>
+<table><tr><th style="width:80px">Date/Time</th><th>Notable Activities</th></tr>
+${activities || '<tr><td colspan="2">No entries</td></tr>'}
+</table></div>
+<div class="box"><strong>8. Prepared by:</strong> ${header.ncsCall||''} &nbsp;&nbsp; Date/Time: ${new Date().toLocaleString()}<br>
+Signature: ___________________________ &nbsp; Facility: Field / Mobile</div>
+<p style="text-align:center;font-size:9pt">Generated by Skywarn NCS Log &nbsp;|&nbsp; Page 1 of 1</p>
+</body></html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ICS-214_Skywarn_${date}.html`;
+  a.click();
+  // Also open for immediate print view
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function downloadBlob(content, filename, type) {
+  const blob = new Blob([content], {type});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function clearLog() {
+  if (!confirm('Clear the entire log and header? This cannot be undone.')) return;
+  log = [];
+  header = {};
+  localStorage.removeItem(STORAGE_KEY);
+  applyHeader();
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  load();
+  if (!document.getElementById('netDate').value) {
+    document.getElementById('netDate').value = new Date().toISOString().slice(0,10);
+  }
+});
+</script>
+</body>
+</html>
