@@ -266,11 +266,31 @@ function load() {
 }
 
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ log, header }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ log, header }));
+  } catch (e) {
+    alert('Could not save to local storage: ' + e.message + '. Export JSON now to keep this log.');
+  }
+}
+
+function esc(v) {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Today's date in the local time zone, as YYYY-MM-DD
+function localDateISO(d = new Date()) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// NCS callsign from the saved header, or from the form if the header has not been saved yet
+function ncsCallsign() {
+  return (header.ncsCall || document.getElementById('ncsCall').value || '').trim().toUpperCase();
 }
 
 function applyHeader() {
-  document.getElementById('netDate').value = header.date || new Date().toISOString().slice(0,10);
+  document.getElementById('netDate').value = header.date || localDateISO();
   document.getElementById('netStart').value = header.start || '';
   document.getElementById('netStop').value = header.stop || '';
   document.getElementById('frequency').value = header.frequency || '';
@@ -354,7 +374,7 @@ function addEntry() {
 
 function deleteEntry(id) {
   if (!confirm('Delete this entry?')) return;
-  log = log.filter(e => e.id !== id);
+  log = log.filter(e => String(e.id) !== String(id));
   save();
   render();
 }
@@ -363,6 +383,12 @@ function timeToMinutes(t) {
   if (!t) return null;
   const [h, m, s] = t.split(':').map(Number);
   return (h || 0) * 60 + (m || 0) + (s || 0) / 60;
+}
+
+// Minutes from a to b on a 24-hour clock; a later time that reads smaller crossed midnight
+function minutesBetween(a, b) {
+  if (a == null || b == null) return null;
+  return b >= a ? b - a : b + 1440 - a;
 }
 
 function formatDuration(mins) {
@@ -402,43 +428,39 @@ function getOperatorStatus() {
 function calcTimes() {
   const startMin = timeToMinutes(header.start);
   const stopMin = timeToMinutes(header.stop) ?? timeToMinutes(new Date().toTimeString().slice(0,8));
-  const netMins = (startMin != null && stopMin != null) ? Math.max(0, stopMin - startMin) : null;
+  const netMins = minutesBetween(startMin, stopMin);
 
   const opStatus = getOperatorStatus();
 
-  // Pair tracking: any non-Check-out opens or continues a session; Check-out closes it
-  const pairs = {};
+  // Session tracking: any non-Check-out opens a session if none is open; Check-out closes it.
+  // Closed sessions add up, so an operator who checks in and out twice gets both.
+  const ncs = ncsCallsign();
+  const sessions = {};
   [...log].reverse().forEach(e => { // oldest first
+    const s = sessions[e.callsign] ||= { closedMins: 0, openIn: null };
     if (isCheckInType(e.type)) {
-      if (!pairs[e.callsign] || pairs[e.callsign].outTime) {
-        // Start a new open session
-        pairs[e.callsign] = { inTime: e.time, outTime: null, name: e.name, location: e.location };
-      } else {
-        // Already open — just refresh name/location if provided
-        if (e.name) pairs[e.callsign].name = e.name;
-        if (e.location) pairs[e.callsign].location = e.location;
-      }
-    } else if (e.type === 'Check-out' && pairs[e.callsign] && !pairs[e.callsign].outTime) {
-      pairs[e.callsign].outTime = e.time;
+      if (s.openIn == null) s.openIn = e.time;
+    } else if (e.type === 'Check-out' && s.openIn != null) {
+      s.closedMins += minutesBetween(timeToMinutes(s.openIn), timeToMinutes(e.time)) || 0;
+      s.openIn = null;
     }
   });
 
-  totalOpMins = 0;
+  let totalOpMins = 0;
   const durations = {};
   // NCS
-  if (header.ncsCall && netMins != null) {
-    durations[header.ncsCall] = netMins;
+  if (ncs && netMins != null) {
+    durations[ncs] = netMins;
     totalOpMins += netMins;
   }
-  Object.entries(pairs).forEach(([call, p]) => {
-    if (call === header.ncsCall) return;
-    const inM = timeToMinutes(p.inTime);
-    const outM = p.outTime ? timeToMinutes(p.outTime) : (stopMin ?? timeToMinutes(new Date().toTimeString().slice(0,8)));
-    if (inM != null && outM != null) {
-      const d = Math.max(0, outM - inM);
-      durations[call] = (durations[call] || 0) + d;
-      totalOpMins += d;
+  Object.entries(sessions).forEach(([call, s]) => {
+    if (call === ncs) return;
+    let d = s.closedMins;
+    if (s.openIn != null) {
+      d += minutesBetween(timeToMinutes(s.openIn), stopMin) || 0;
     }
+    durations[call] = d;
+    totalOpMins += d;
   });
 
   return { netMins, totalOpMins, durations, current: Object.entries(opStatus).filter(([,s]) => s.in).map(([c,s]) => c) };
@@ -453,14 +475,14 @@ function render() {
     else if (!['Check-out','Traffic / Message'].includes(e.type)) reports++;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${e.time}</td>
-      <td><strong>${e.callsign}</strong></td>
-      <td>${e.name || ''}</td>
-      <td>${e.location || ''}</td>
-      <td>${e.type}</td>
-      <td class="priority-${e.priority}">${e.priority}</td>
-      <td>${e.details || ''}</td>
-      <td class="actions"><button class="secondary" onclick="deleteEntry(${e.id})">Del</button></td>
+      <td>${esc(e.time)}</td>
+      <td><strong>${esc(e.callsign)}</strong></td>
+      <td>${esc(e.name)}</td>
+      <td>${esc(e.location)}</td>
+      <td>${esc(e.type)}</td>
+      <td class="priority-${esc(e.priority)}">${esc(e.priority)}</td>
+      <td>${esc(e.details)}</td>
+      <td class="actions"><button class="secondary" data-id="${esc(e.id)}" onclick="deleteEntry(this.dataset.id)">Del</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -470,14 +492,14 @@ function render() {
     `Entries: ${log.length} | Check-ins: ${checkins} | WX Reports: ${reports} | Net Time: ${formatDuration(netMins)} | Total Operator Time: ${formatDuration(totalOpMins)}`;
 
   document.getElementById('currentOps').innerHTML = current.length
-    ? current.map(c => `<span class="op-in">${c}</span>`).join(', ')
+    ? current.map(c => `<span class="op-in">${esc(c)}</span>`).join(', ')
     : 'none';
 }
 
 function exportCSV() {
   const headers = ['Time','Callsign','Name','Location','Type','Priority','Details'];
   const rows = log.map(e => [e.time, e.callsign, e.name, e.location, e.type, e.priority, e.details]);
-  const csv = [headers, ...rows].map(r => r.map(f => `"${(f||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv = [headers, ...rows].map(r => r.map(f => `"${String(f ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
   downloadBlob(csv, `Skywarn_NCS_Log_${header.date || 'unknown'}.csv`, 'text/csv');
 }
 
@@ -509,14 +531,21 @@ function importJSON(ev) {
 
 function exportICS214() {
   const { netMins, totalOpMins, durations } = calcTimes();
-  const date = header.date || new Date().toISOString().slice(0,10);
-  const incident = `Skywarn Activation ${date}`;
-  const activities = [...log].reverse().map(e => 
-    `<tr><td>${e.time}</td><td>${e.callsign} ${e.name||''} – ${e.type}${e.priority!=='Normal'?' ['+e.priority+']':''}: ${e.details||''}</td></tr>`
+  const date = header.date || localDateISO();
+  // A net whose stop time reads earlier than its start ran past midnight
+  let dateTo = date;
+  const startMin = timeToMinutes(header.start), stopMin = timeToMinutes(header.stop);
+  if (startMin != null && stopMin != null && stopMin < startMin) {
+    const [y, m, d] = date.split('-').map(Number);
+    dateTo = localDateISO(new Date(y, m - 1, d + 1));
+  }
+  const incident = esc(`Skywarn Activation ${date}`);
+  const activities = [...log].reverse().map(e =>
+    `<tr><td>${esc(e.time)}</td><td>${esc(e.callsign)} ${esc(e.name)} – ${esc(e.type)}${e.priority!=='Normal'?' ['+esc(e.priority)+']':''}: ${esc(e.details)}</td></tr>`
   ).join('');
 
-  const opRows = Object.entries(durations).map(([call, mins]) => 
-    `<tr><td>${call}</td><td>Spotter / NCS</td><td>${formatDuration(mins)}</td></tr>`
+  const opRows = Object.entries(durations).map(([call, mins]) =>
+    `<tr><td>${esc(call)}</td><td>Spotter / NCS</td><td>${formatDuration(mins)}</td></tr>`
   ).join('');
 
   const html = `<!DOCTYPE html>
@@ -533,10 +562,10 @@ th{background:#eee}
 <h1>ACTIVITY LOG (ICS 214)</h1>
 <div class="box"><strong>1. Incident Name:</strong> ${incident}</div>
 <div class="box"><strong>2. Operational Period:</strong><br>
-Date From: ${date} &nbsp;&nbsp; Date To: ${date}<br>
-Time From: ${header.start||'—'} &nbsp;&nbsp; Time To: ${header.stop||'—'}</div>
+Date From: ${esc(date)} &nbsp;&nbsp; Date To: ${esc(dateTo)}<br>
+Time From: ${esc(header.start||'—')} &nbsp;&nbsp; Time To: ${esc(header.stop||'—')}</div>
 <div class="box"><strong>3. Name:</strong> Skywarn Net Control<br>
-<strong>4. ICS Position:</strong> Net Control Station (${header.ncsCall||''})<br>
+<strong>4. ICS Position:</strong> Net Control Station (${esc(ncsCallsign())})<br>
 <strong>5. Home Agency:</strong> Amateur Radio / Skywarn</div>
 <div class="box"><strong>6. Resources Assigned:</strong>
 <table><tr><th>Name / Call</th><th>ICS Position</th><th>Time on Net</th></tr>
@@ -548,7 +577,7 @@ ${opRows || '<tr><td colspan="3">None recorded</td></tr>'}
 <table><tr><th style="width:80px">Date/Time</th><th>Notable Activities</th></tr>
 ${activities || '<tr><td colspan="2">No entries</td></tr>'}
 </table></div>
-<div class="box"><strong>8. Prepared by:</strong> ${header.ncsCall||''} &nbsp;&nbsp; Date/Time: ${new Date().toLocaleString()}<br>
+<div class="box"><strong>8. Prepared by:</strong> ${esc(ncsCallsign())} &nbsp;&nbsp; Date/Time: ${new Date().toLocaleString()}<br>
 Signature: ___________________________ &nbsp; Facility: Field / Mobile</div>
 <p style="text-align:center;font-size:9pt">Generated by Skywarn NCS Log &nbsp;|&nbsp; Page 1 of 1</p>
 </body></html>`;
@@ -560,8 +589,10 @@ Signature: ___________________________ &nbsp; Facility: Field / Mobile</div>
   a.click();
   // Also open for immediate print view
   const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  }
 }
 
 function downloadBlob(content, filename, type) {
@@ -584,7 +615,7 @@ function clearLog() {
 document.addEventListener('DOMContentLoaded', () => {
   load();
   if (!document.getElementById('netDate').value) {
-    document.getElementById('netDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('netDate').value = localDateISO();
   }
 });
 </script>
