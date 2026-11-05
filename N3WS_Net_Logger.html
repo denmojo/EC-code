@@ -901,6 +901,59 @@
       return (c || "").trim().toUpperCase().replace(/[^A-Z0-9\/]/g, "");
     }
 
+    // ---------- Validation ----------
+    function asText(v) {
+      return typeof v === "string" ? v : (v == null ? "" : String(v));
+    }
+
+    function asTime(v) {
+      return typeof v === "string" && !isNaN(new Date(v).getTime()) ? v : null;
+    }
+
+    // Clean a roster list: normalized callsigns, no blanks, no duplicates, sorted
+    function cleanRoster(list) {
+      if (!Array.isArray(list)) throw new Error("roster is not a list");
+      const byCall = new Map();
+      list.forEach(r => {
+        if (!r || typeof r !== "object") return;
+        const call = normalizeCall(asText(r.call));
+        if (!call || byCall.has(call)) return;
+        byCall.set(call, {
+          call,
+          name: asText(r.name),
+          location: asText(r.location),
+          comment: asText(r.comment),
+          lastSeen: asTime(r.lastSeen)
+        });
+      });
+      return [...byCall.values()].sort((a, b) => a.call.localeCompare(b.call));
+    }
+
+    // Clean a net object; throws if it is not usable
+    function cleanNet(net) {
+      if (!net || typeof net !== "object") throw new Error("net is not an object");
+      const status = ["idle", "running", "stopped"].includes(net.status) ? net.status : "idle";
+      const checkins = (Array.isArray(net.checkins) ? net.checkins : [])
+        .filter(c => c && typeof c === "object" && normalizeCall(asText(c.call)))
+        .map((c, i) => ({
+          id: asText(c.id) || Date.now().toString(36) + Math.random().toString(36).slice(2),
+          call: normalizeCall(asText(c.call)),
+          name: asText(c.name),
+          location: asText(c.location),
+          comment: asText(c.comment),
+          time: asTime(c.time) || nowISO(),
+          isNCS: i === 0,
+          acked: c.acked === true
+        }));
+      const startTime = asTime(net.startTime);
+      return {
+        status: status === "running" && !startTime ? "idle" : status,
+        startTime,
+        endTime: asTime(net.endTime),
+        checkins
+      };
+    }
+
     // ---------- Persistence ----------
     function loadState() {
       try {
@@ -908,12 +961,14 @@
         if (raw) {
           const data = JSON.parse(raw);
           state = { ...state, ...data };
-          if (!state.net) state.net = { status: "idle", startTime: null, endTime: null, checkins: [] };
-          if (!Array.isArray(state.roster)) state.roster = [];
         }
       } catch (e) {
         console.warn("Load failed", e);
       }
+      try { state.net = cleanNet(state.net); }
+      catch { state.net = { status: "idle", startTime: null, endTime: null, checkins: [] }; }
+      try { state.roster = cleanRoster(state.roster); }
+      catch { state.roster = []; }
       applyTheme();
       renderAll();
       if (state.net.status === "running") startTimer();
@@ -1459,7 +1514,7 @@
         const origIdx = state.roster.findIndex(x => x.call === r.call);
         return `
         <li class="roster-item" title="Click to add as check-in">
-          <div class="call" onclick="useRosterEntry(${origIdx})">${r.call}</div>
+          <div class="call" onclick="useRosterEntry(${origIdx})">${escapeHtml(r.call)}</div>
           <div class="info" onclick="useRosterEntry(${origIdx})">${escapeHtml(r.name || "")}${r.location ? " · " + escapeHtml(r.location) : ""}</div>
           <div class="item-actions">
             <button class="icon-btn" onclick="event.stopPropagation();openEditRoster(${origIdx})" title="Edit">✎</button>
@@ -1516,9 +1571,9 @@
           }
           if (rosterOnly) {
             if (Array.isArray(data.roster)) {
-              data.roster.forEach(r => upsertRoster(r));
+              cleanRoster(data.roster).forEach(r => upsertRoster(r));
               // also pull unique from net.checkins if present
-              if (data.net?.checkins) data.net.checkins.forEach(c => upsertRoster(c));
+              if (Array.isArray(data.net?.checkins)) cleanRoster(data.net.checkins).forEach(c => upsertRoster(c));
               saveState();
               renderRoster();
               toast(`Roster updated (${state.roster.length} entries)`);
@@ -1526,9 +1581,18 @@
               toast("No roster found in file");
             }
           } else {
-            if (data.net) state.net = data.net;
-            if (Array.isArray(data.roster)) state.roster = data.roster;
-            if (data.theme) state.theme = data.theme;
+            // Validate everything before touching state, so a bad file changes nothing
+            let net, roster;
+            try {
+              net = data.net ? cleanNet(data.net) : null;
+              roster = Array.isArray(data.roster) ? cleanRoster(data.roster) : null;
+            } catch (verr) {
+              toast("Import failed: " + verr.message);
+              return;
+            }
+            if (net) state.net = net;
+            if (roster) state.roster = roster;
+            if (data.theme === "light" || data.theme === "dark") state.theme = data.theme;
             applyTheme();
             saveState();
             if (state.net.status === "running") startTimer();
@@ -1615,7 +1679,7 @@
         }
         box.innerHTML = matches.map((r, i) => `
           <div class="sug-item" data-idx="${i}" title="${escapeHtml((r.name || "") + (r.location ? " · " + r.location : ""))}">
-            <span class="sug-call">${r.call}</span>
+            <span class="sug-call">${escapeHtml(r.call)}</span>
             ${r.name ? `<span class="sug-info">${escapeHtml(r.name)}</span>` : ""}
           </div>
         `).join("");
