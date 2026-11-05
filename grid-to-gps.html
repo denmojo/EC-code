@@ -18,36 +18,40 @@
 </head>
 <body>
     <h1>Maidenhead Grid to GPS Converter</h1>
-    <p>Enter a 6-10 character Maidenhead Grid Square:</p>
+    <p>Enter a 4-10 character Maidenhead Grid Square:</p>
     <input type="text" id="gridInput" placeholder="e.g. FN31pr" maxlength="10">
     <button onclick="convertGrid()">Convert to GPS</button>
 
     <div id="result"></div>
     
     <script>
+        const GRID_RE = /^[A-R]{2}[0-9]{2}(?:[A-X]{2}(?:[0-9]{2}(?:[A-X]{2})?)?)?$/;
+
+        // Returns the center of the grid square, accepting either letter case.
         function gridToLatLon(grid) {
-            const A = 'A'.charCodeAt(0);
-            const a = 'a'.charCodeAt(0);
-            
-            // Calculate longitude
-            let lon = (grid.charCodeAt(0) - A) * 20 - 180;
-            lon += (grid.charCodeAt(2) - '0'.charCodeAt(0)) * 2;
-            if (grid.length > 4) lon += (grid.charCodeAt(4) - a) * 5 / 60;
-            if (grid.length > 6) lon += (grid.charCodeAt(6) - '0'.charCodeAt(0)) * 0.5 / 60;
+            grid = grid.toUpperCase();
+            const letter = i => grid.charCodeAt(i) - 65;
+            const digit = i => grid.charCodeAt(i) - 48;
 
-            // Calculate latitude
-            let lat = (grid.charCodeAt(1) - A) * 10 - 90;
-            lat += (grid.charCodeAt(3) - '0'.charCodeAt(0));
-            if (grid.length > 5) lat += (grid.charCodeAt(5) - a) * 2.5 / 60;
-            if (grid.length > 7) lat += (grid.charCodeAt(7) - '0'.charCodeAt(0)) * 0.25 / 60;
-
+            // Size of each pair's cell in degrees: [lon, lat]
+            const steps = [[20, 10], [2, 1], [2 / 24, 1 / 24], [2 / 240, 1 / 240], [2 / 5760, 1 / 5760]];
+            let lon = -180, lat = -90;
+            const pairs = grid.length / 2;
+            for (let p = 0; p < pairs; p++) {
+                const read = p % 2 === 0 ? letter : digit;
+                lon += read(2 * p) * steps[p][0];
+                lat += read(2 * p + 1) * steps[p][1];
+            }
+            lon += steps[pairs - 1][0] / 2;
+            lat += steps[pairs - 1][1] / 2;
             return [lat, lon];
         }
 
         function convertGrid() {
             const grid = document.getElementById('gridInput').value.trim();
-            if (grid.length < 4 || grid.length > 10) {
-                document.getElementById('result').innerHTML = 'Invalid grid square length!';
+            if (!GRID_RE.test(grid.toUpperCase())) {
+                document.getElementById('result').textContent =
+                    'Invalid grid square: use 4, 6, 8 or 10 characters, e.g. FN31 or FN31pr.';
                 return;
             }
 
