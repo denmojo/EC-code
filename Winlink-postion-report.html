@@ -36,6 +36,7 @@
     .green-header { background:#004400; color:#00ff00; }
     .yellow-header { background:#664400; color:#ffdd00; }
     .red-header { background:#660000; color:#ff6666; }
+    .other-header { background:#333; color:#ccc; }
 
     .article {
       background:var(--card); border-radius:10px; padding:16px; margin-bottom:12px;
@@ -78,6 +79,22 @@
       return "neutral";
     }
 
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    // APRS DDMM.mm / DDDMM.mm (degrees and decimal minutes) to decimal degrees
+    function aprsToDegrees(value, degDigits, hemi) {
+      const deg = parseInt(value.slice(0, degDigits), 10);
+      const min = parseFloat(value.slice(degDigits));
+      const d = deg + min / 60;
+      return (hemi === 'S' || hemi === 'W') ? -d : d;
+    }
+
+    // APRS object: ;NAME_____*DDHHMMzDDMM.mmN/DDDMM.mmW$comment
+    const APRS_OBJECT = /^;(.{9})[*_](?:\d{6}[zh\/])?(\d{4}\.\d{2})([NS]).(\d{5}\.\d{2})([EW])(.)(.*)$/;
+
     function parsePositionFile(text) {
       const lines = text.split('\n');
       const reports = [];
@@ -86,27 +103,25 @@
         line = line.trim();
         if (!line || !line.startsWith(';')) continue;
 
-        const callsignMatch = line.match(/^;(\S+)/);
-        if (!callsignMatch) continue;
-        const callsign = callsignMatch[1].trim();
-
-        // Extract Lat/Lon
-        const latMatch = line.match(/(\d+\.\d+[NS])/);
-        const lonMatch = line.match(/(\d+\.\d+[EW])/);
-        let lat = null, lon = null;
-
-        if (latMatch) {
-          let s = latMatch[1].replace(/[NS]/, '');
-          lat = parseFloat(s.slice(0,2) + '.' + s.slice(2));
-          if (latMatch[1].includes('S')) lat = -lat;
+        let callsign, lat = null, lon = null, comment;
+        const obj = line.match(APRS_OBJECT);
+        if (obj) {
+          callsign = obj[1].trim();
+          lat = aprsToDegrees(obj[2], 2, obj[3]);
+          lon = aprsToDegrees(obj[4], 3, obj[5]);
+          comment = obj[7].trim();
+        } else {
+          // Fallback for lines that do not follow the APRS object layout
+          const callsignMatch = line.match(/^;([^\s*_]+)/);
+          if (!callsignMatch) continue;
+          callsign = callsignMatch[1].trim();
+          const latMatch = line.match(/(\d{4}\.\d+)([NS])/);
+          const lonMatch = line.match(/(\d{5}\.\d+)([EW])/);
+          if (latMatch) lat = aprsToDegrees(latMatch[1], 2, latMatch[2]);
+          if (lonMatch) lon = aprsToDegrees(lonMatch[1], 3, lonMatch[2]);
+          comment = line.split('a').slice(1).join('a').trim();
         }
-        if (lonMatch) {
-          let s = lonMatch[1].replace(/[EW]/, '');
-          lon = parseFloat(s.slice(0,3) + '.' + s.slice(3));
-          if (lonMatch[1].includes('W')) lon = -lon;
-        }
-
-        const comment = line.split('a').slice(1).join('a').trim() || "No comment";
+        comment = comment || "No comment";
 
         reports.push({
           callsign: callsign,
@@ -122,14 +137,14 @@
     function createArticleHTML(report) {
       let mapsHTML = '';
       if (report.lat !== null && report.lon !== null) {
-        mapsHTML = `<a href="https://www.google.com/maps?q=${report.lat},${report.lon}" target="_blank" class="maps-link">🗺️ Google Maps</a>`;
+        mapsHTML = `<a href="https://www.google.com/maps?q=${report.lat.toFixed(5)},${report.lon.toFixed(5)}" target="_blank" rel="noopener" class="maps-link">🗺️ Google Maps</a>`;
       }
 
       return `
         <div class="article">
-          <div class="article-title">${report.callsign}</div>
-          <div class="article-desc">${report.comment}</div>
-
+          <div class="article-title">${escapeHtml(report.callsign)}</div>
+          <div class="article-desc">${escapeHtml(report.comment)}</div>
+          ${mapsHTML}
         </div>`;
     }
 
@@ -143,6 +158,8 @@
                             .sort((a, b) => a.callsign.localeCompare(b.callsign));
       const red = reports.filter(r => r.condition === "red")
                          .sort((a, b) => a.callsign.localeCompare(b.callsign));
+      const other = reports.filter(r => r.condition === "neutral")
+                           .sort((a, b) => a.callsign.localeCompare(b.callsign));
 
       container.innerHTML = `
         <div class="column">
@@ -157,6 +174,11 @@
           <div class="column-header red-header">🚨 RED - EMERGENCY</div>
           ${red.length ? red.map(r => createArticleHTML(r)).join('') : '<div class="empty">No Red reports</div>'}
         </div>
+        ${other.length ? `
+        <div class="column">
+          <div class="column-header other-header">❔ NO STATUS</div>
+          ${other.map(r => createArticleHTML(r)).join('')}
+        </div>` : ''}
       `;
     }
 
@@ -169,6 +191,8 @@
         renderReports(parsePositionFile(lastFileContent));
       };
       reader.readAsText(file);
+      // Clear the input so choosing the same (updated) file again fires change
+      e.target.value = "";
     }
 
     function refreshFromLastFile() {
@@ -188,7 +212,7 @@
     document.addEventListener('drop', e => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file && file.name.endsWith('.pos')) {
+      if (file && file.name.toLowerCase().endsWith('.pos')) {
         const reader = new FileReader();
         reader.onload = ev => {
           lastFileContent = ev.target.result;
