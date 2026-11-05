@@ -357,8 +357,8 @@ function renderVolunteers() {
       <div>${escapeHtml(v.role || '—')} ${v.contact ? '· ' + escapeHtml(v.contact) : ''}</div>
       <div class="time">In: ${formatTime(v.checkIn)}${v.checkOut ? ' · Out: ' + formatTime(v.checkOut) : ''}</div>
       <div style="margin-top:6px;">
-        ${!v.checkOut ? `<button class="small secondary" data-action="checkout" data-id="${v.id}">Check Out</button>` : ''}
-        <button class="small danger" data-action="delvol" data-id="${v.id}">Remove</button>
+        ${!v.checkOut ? `<button class="small secondary" data-action="checkout" data-id="${escapeHtml(v.id)}">Check Out</button>` : ''}
+        <button class="small danger" data-action="delvol" data-id="${escapeHtml(v.id)}">Remove</button>
       </div>
     `;
     list.appendChild(div);
@@ -387,15 +387,15 @@ function renderLogs(filter = 'all') {
     const volName = vol ? vol.name : '';
     div.innerHTML = `
       <header>
-        <span class="badge badge-${l.type}">${l.type}</span>
+        <span class="badge badge-${escapeHtml(l.type)}">${escapeHtml(l.type)}</span>
         <span class="time">${formatTime(l.timestamp)}</span>
       </header>
       <div>${escapeHtml(l.description)}</div>
       ${l.bib ? `<div class="time">Bib: ${escapeHtml(l.bib)}</div>` : ''}
       ${volName ? `<div class="time">Volunteer: ${escapeHtml(volName)}</div>` : ''}
       <div style="margin-top:6px;">
-        <button class="small secondary" data-action="editlog" data-id="${l.id}">Edit</button>
-        <button class="small danger" data-action="dellog" data-id="${l.id}">Delete</button>
+        <button class="small secondary" data-action="editlog" data-id="${escapeHtml(l.id)}">Edit</button>
+        <button class="small danger" data-action="dellog" data-id="${escapeHtml(l.id)}">Delete</button>
       </div>
     `;
     list.appendChild(div);
@@ -421,12 +421,13 @@ function updateDuration() {
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
   return String(str)
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function addVolunteer(name, role, contact) {
