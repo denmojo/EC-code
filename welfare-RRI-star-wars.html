@@ -21,6 +21,7 @@
             border-radius: 5px;
             width: 400px;
             line-height: 1.6;
+            white-space: pre-line;
         }
         button {
             padding: 10px 20px;
@@ -73,21 +74,26 @@
             const randomCharacter = starWarsCharacters[Math.floor(Math.random() * starWarsCharacters.length)];
             const randomCheckType = checkTypes[Math.floor(Math.random() * checkTypes.length)];
             const randomCity = ["Tatooine", "Coruscant", "Naboo", "Alderaan", "Hoth", "Endor", "Dagobah", "Jakku", "Bespin", "Mustafar"][Math.floor(Math.random() * 10)];
-            const randomNumber = Math.floor(Math.random() * 9999) + 1000; // Random 4-digit number for message number
+            const randomNumber = Math.floor(Math.random() * 9000) + 1000; // Random 4-digit number for message number
             const currentDate = new Date().toLocaleDateString();
 
-            const radiogramMessage = `
-                Message Number: ${randomNumber} \n
-                Precedence: Welfare \n
-                HX: N \n
-                Station of Origin: ${randomCharacter} \n
-                Check: 12 \n
-                Place of Origin: ${randomCity} \n
-                Time Filed: ${new Date().toLocaleTimeString()} \n
-                Date: ${currentDate} \n\n
-                Text: ${randomCheckType} for ${randomCharacter} on ${randomCity}. Please respond ASAP. \n\n
-                Signature: ${randomCharacter}
-            `;
+            // Radiogram text: the period is sent as X, and the check is the word count
+            const text = `${randomCheckType} for ${randomCharacter} on ${randomCity} X Please respond ASAP`;
+            const check = text.split(/\s+/).length;
+
+            const radiogramMessage = [
+                `Message Number: ${randomNumber}`,
+                `Precedence: Welfare`,
+                `Station of Origin: ${randomCharacter}`,
+                `Check: ${check}`,
+                `Place of Origin: ${randomCity}`,
+                `Time Filed: ${new Date().toLocaleTimeString()}`,
+                `Date: ${currentDate}`,
+                ``,
+                `Text: ${text}`,
+                ``,
+                `Signature: ${randomCharacter}`
+            ].join('\n');
 
             const radiogramDiv = document.getElementById('radiogram');
             radiogramDiv.textContent = radiogramMessage;
