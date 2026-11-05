@@ -251,9 +251,25 @@ button.small { padding: 4px 10px; font-size: 0.85rem; }
 <script>
 const STORAGE_KEY = 'charityRunNCSLog_v1';
 
+// Today's date in the local time zone, as YYYY-MM-DD
+function localDateISO(d = new Date()) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Volunteer name for a log entry, falling back to the name saved when the volunteer was removed
+function volunteerNameFor(l) {
+  const vol = state.volunteers.find(v => v.id === l.volunteerId);
+  return vol ? vol.name : (l.volunteerName || '');
+}
+
+function csvField(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
 let state = {
   eventName: '',
-  eventDate: new Date().toISOString().slice(0, 10),
+  eventDate: localDateISO(),
   ncsName: '',
   icsPosition: 'Net Control Station',
   homeAgency: '',
@@ -331,6 +347,7 @@ function renderVolunteers() {
   const active = state.volunteers.filter(v => !v.checkOut).length;
   stats.innerHTML = `<div class="stat">Total: ${state.volunteers.length}</div><div class="stat">On duty: ${active}</div>`;
 
+  const prevSel = sel.value;
   sel.innerHTML = '<option value="">— none —</option>';
   state.volunteers.forEach(v => {
     const opt = document.createElement('option');
@@ -338,6 +355,7 @@ function renderVolunteers() {
     opt.textContent = v.name + (v.role ? ` (${v.role})` : '');
     sel.appendChild(opt);
   });
+  sel.value = prevSel;
 
   if (state.volunteers.length === 0) {
     list.innerHTML = '<div class="empty">No volunteers yet</div>';
@@ -383,8 +401,7 @@ function renderLogs(filter = 'all') {
   logs.forEach(l => {
     const div = document.createElement('div');
     div.className = 'item';
-    const vol = state.volunteers.find(v => v.id === l.volunteerId);
-    const volName = vol ? vol.name : '';
+    const volName = volunteerNameFor(l);
     div.innerHTML = `
       <header>
         <span class="badge badge-${escapeHtml(l.type)}">${escapeHtml(l.type)}</span>
@@ -538,7 +555,7 @@ function exportJSON() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const name = (state.eventName || 'charity-run').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.download = `${name}-ncs-log-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `${name}-ncs-log-${localDateISO()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
   showToast('Exported');
@@ -546,21 +563,18 @@ function exportJSON() {
 
 function exportCSV() {
   const headers = ['Timestamp','Type','Description','Bib','Volunteer'];
-  const rows = state.logs.map(l => {
-    const vol = state.volunteers.find(v => v.id === l.volunteerId);
-    return [
+  const rows = state.logs.map(l => [
       formatDateTime(l.timestamp),
       l.type,
-      `"${(l.description || '').replace(/"/g, '""')}"`,
-      l.bib || '',
-      vol ? vol.name : ''
-    ].join(',');
-  });
-  const csv = [headers.join(','), ...rows].join('\n');
+      l.description,
+      l.bib,
+      volunteerNameFor(l)
+    ].map(csvField).join(','));
+  const csv = [headers.map(csvField).join(','), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `ncs-activity-log-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `ncs-activity-log-${localDateISO()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
   showToast('CSV exported');
@@ -584,11 +598,12 @@ function exportICS214() {
   `).join('');
 
   const activitiesHtml = sortedLogs.map(l => {
-    const vol = state.volunteers.find(v => v.id === l.volunteerId);
-    let desc = l.description;
-    if (l.type !== 'general') desc = `[${l.type.toUpperCase()}] ${desc}`;
+    const volName = volunteerNameFor(l);
+    const type = String(l.type || 'general');
+    let desc = l.description || '';
+    if (type !== 'general') desc = `[${type.toUpperCase()}] ${desc}`;
     if (l.bib) desc += ` (Bib: ${l.bib})`;
-    if (vol) desc += ` [Vol: ${vol.name}]`;
+    if (volName) desc += ` [Vol: ${volName}]`;
     return `
       <tr>
         <td style="white-space:nowrap;">${formatDate(l.timestamp)} ${formatTime24(l.timestamp)}</td>
@@ -806,9 +821,16 @@ document.body.addEventListener('click', e => {
   if (action === 'checkout') checkOutVolunteer(id);
   if (action === 'delvol') {
     if (confirm('Remove this volunteer?')) {
+      const removed = state.volunteers.find(v => v.id === id);
+      if (removed) {
+        state.logs.forEach(l => {
+          if (l.volunteerId === id) l.volunteerName = removed.name;
+        });
+      }
       state.volunteers = state.volunteers.filter(v => v.id !== id);
       save();
       renderVolunteers();
+      renderLogs(currentFilter);
     }
   }
   if (action === 'dellog') {
