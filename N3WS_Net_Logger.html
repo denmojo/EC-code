@@ -1341,9 +1341,25 @@
     }
 
     // ---------- Lookup ----------
+    let lookupInFlight = null;
+
+    // True while the callsign field still holds the call this lookup was for
+    function stillCurrent(call) {
+      return normalizeCall($("inpCall").value) === call;
+    }
+
     async function lookupCallsign(call) {
       call = normalizeCall(call);
-      if (!call) return;
+      if (!call || lookupInFlight === call) return;
+      lookupInFlight = call;
+      try {
+        await runLookup(call);
+      } finally {
+        if (lookupInFlight === call) lookupInFlight = null;
+      }
+    }
+
+    async function runLookup(call) {
 
       const status = $("lookupStatus");
       status.textContent = "Looking up…";
@@ -1369,6 +1385,7 @@
           const lookDoc = parser.parseFromString(lookText, "text/xml");
           const callNode = lookDoc.querySelector("Callsign");
           if (callNode) {
+            if (!stillCurrent(call)) return;
             const fname = callNode.querySelector("fname")?.textContent || "";
             const name = callNode.querySelector("name")?.textContent || "";
             const fullName = (fname + " " + name).trim();
@@ -1395,6 +1412,7 @@
         const res = await fetch(`https://callook.info/${encodeURIComponent(call)}/json`);
         if (!res.ok) throw new Error("Callook HTTP " + res.status);
         const data = await res.json();
+        if (!stillCurrent(call)) return;
         if (data.status === "VALID") {
           const name = data.name || "";
           const locParts = [];
@@ -1413,13 +1431,14 @@
           status.className = "lookup-status err";
         }
       } catch (e) {
+        if (!stillCurrent(call)) return;
         status.textContent = "Lookup failed (network / CORS)";
         status.className = "lookup-status err";
         console.warn(e);
       }
 
-      // Offer QRZ page
-      status.innerHTML = `Lookup limited. <a href="https://www.qrz.com/db/${call}" target="_blank" rel="noopener" style="color:var(--accent);">Open ${call} on QRZ</a>`;
+      // Offer QRZ page after the reason the lookup failed
+      status.innerHTML = `${escapeHtml(status.textContent)}. <a href="https://www.qrz.com/db/${encodeURIComponent(call)}" target="_blank" rel="noopener" style="color:var(--accent);">Open ${escapeHtml(call)} on QRZ</a>`;
     }
 
     // ---------- Render ----------
@@ -1752,11 +1771,15 @@
           // If a suggestion is highlighted, use it (selectSuggestion already adds)
           if (sugIndex >= 0 && matches[sugIndex]) {
             selectSuggestion(matches[sugIndex]);
-          } else if (matches.length === 1) {
-            // Exactly one match → select & add
-            selectSuggestion(matches[0]);
           } else {
-            // No unique match → just try to add whatever is typed
+            // Add what was typed; if it is a roster call exactly, fill any blank fields from the roster
+            const typed = normalizeCall($("inpCall").value);
+            const exact = state.roster.find(r => r.call === typed);
+            if (exact) {
+              if (!$("inpName").value) $("inpName").value = exact.name || "";
+              if (!$("inpLoc").value) $("inpLoc").value = exact.location || "";
+              if (!$("inpComment").value) $("inpComment").value = exact.comment || "";
+            }
             hideSuggestions();
             addCheckin();
           }
