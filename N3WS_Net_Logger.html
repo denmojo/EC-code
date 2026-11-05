@@ -1051,6 +1051,10 @@
     // ---------- Net Control ----------
     function startNet() {
       if (state.net.status === "running") return;
+      if (state.net.status === "stopped" &&
+          !confirm("This net was already stopped. Start it again? The recorded start and stop times will be replaced.")) {
+        return;
+      }
       if (state.net.checkins.length === 0) {
         toast("Add the Net Control (first check-in) before starting the net");
         $("inpCall").focus();
@@ -1244,6 +1248,10 @@
       if (!call) { toast("Callsign required"); return; }
 
       if (editContext.type === "checkin") {
+        if (state.net.checkins.some((x, i) => i !== editContext.index && x.call === call)) {
+          toast(`${call} is already checked in`);
+          return;
+        }
         const c = state.net.checkins[editContext.index];
         c.call = call;
         c.name = $("editName").value.trim();
@@ -1251,12 +1259,17 @@
         c.comment = $("editComment").value.trim();
         upsertRoster(c);
       } else if (editContext.type === "roster") {
+        if (state.roster.some((x, i) => i !== editContext.index && x.call === call)) {
+          toast(`${call} is already in the roster`);
+          return;
+        }
         const r = state.roster[editContext.index];
         // If call changes, we treat as replace
         r.call = call;
         r.name = $("editName").value.trim();
         r.location = $("editLoc").value.trim();
         r.comment = $("editComment").value.trim();
+        state.roster.sort((a, b) => a.call.localeCompare(b.call));
       }
       saveState();
       renderCheckins();
@@ -1495,10 +1508,12 @@
           }
           if (e.key === "Escape") {
             e.preventDefault();
+            el.dataset.cancelled = "1"; // the blur that follows must not save
             renderCheckins(); // cancel
           }
         });
         el.addEventListener("blur", () => {
+          if (el.dataset.cancelled) return;
           const idx = parseInt(el.dataset.idx, 10);
           const field = el.dataset.field;
           const value = el.textContent.trim();
@@ -1510,10 +1525,11 @@
     function renderRoster(filterText) {
       const list = $("rosterList");
       const partial = normalizeCall(filterText || ($("inpCall") ? $("inpCall").value : "") || "");
-      let entries = state.roster;
+      // Keep each entry's index in state.roster for edit/delete
+      let entries = state.roster.map((r, idx) => ({ r, idx }));
       let filtered = false;
       if (partial.length >= 1) {
-        entries = state.roster.filter(r => r.call.includes(partial));
+        entries = entries.filter(({ r }) => r.call.includes(partial));
         filtered = true;
       }
       $("rosterCount").textContent = filtered
@@ -1529,8 +1545,7 @@
         return;
       }
       // Map back to original index for edit/delete
-      list.innerHTML = entries.map((r) => {
-        const origIdx = state.roster.findIndex(x => x.call === r.call);
+      list.innerHTML = entries.map(({ r, idx: origIdx }) => {
         return `
         <li class="roster-item" title="Click to add as check-in">
           <div class="call" onclick="useRosterEntry(${origIdx})">${escapeHtml(r.call)}</div>
@@ -1571,11 +1586,17 @@
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      // Local date and time, YYYY-MM-DD-HH-MM-SS
+      const d = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-` +
+                 `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
       a.href = url;
       a.download = `N3WS_Net_${ts}.json`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
       toast("Exported");
     }
 
